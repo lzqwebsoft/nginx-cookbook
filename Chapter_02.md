@@ -36,3 +36,61 @@ server {
 HTTP `upstream` 模块控制HTTP的负载均衡. 这个模块定义了一个目标池 - Unix套接字，IP地址和DNS记录的任意组合，或混合。`upstream` 模块还定义了如何将任意单独的request请求分配给任何上游服务器。
 
 每个上游目标是通过`server`指令在上游池(upstream pool)中定义的。`server`指令提供了Unix套接字，IP地址或FQDN，以及许多可选参数。可选参数提供了许多对请求路由的控制。这些参数包括平衡算法中服务器的权重（weight）; 服务器是处于待机模式（standby mode），可用（available）还是不可用（unavailable）；以及如何确定服务器是否不可用. NGINX Plus提供了许多其他方便的参数，例如与服务器的连接限制，高级DNS解析控制以及在服务器启动后能够缓慢增加与服务器的连接的能力。
+
+## 2.2 TCP负载均衡
+
+### 问题
+
+你需要在两个或多个TCP服务器之间分配负载。
+
+### 解答
+
+使用NGINX的`stream`模块在TCP服务器上使用`upstream`块进行负载均衡:
+
+```
+stream {
+    upstream mysql_read {
+        server read1.example.com:3306  weight=5;
+        server read2.example.com:3306;
+        server 10.10.12.34:3306  backup;
+    }
+    server {
+        listen 3306;
+        roxy_pass mysql_read;
+    }
+}
+```
+
+本例中的`server`块指示NGINX监听TCP端口3306，并在两个MySQL数据库读副本之间均衡负载，并列出另一个作为备份，如果上面的数据库们宕机则将通过该备份。此配置不能添加到`conf.d`文件夹，因为该文件夹包含在`http`块中; 你应该创建一个名为`stream.conf.d`的文件夹，在`nginx.conf`文件中开启一个新的`stream`块，并将新的流（stream）配置引入到这个文件夹。
+
+### 讨论
+
+TCP负载均衡由NGINX `stream`模块定义。与HTTP模块一样，`stream`模块允许您定义上游服务器池（upstream pools）并配置侦听服务器。在将服务器配置为监听给定端口时，必须定义要监听的端口，或者可选地定义地址和端口。从那里，必须配置一个目的地，不管它是另一个地址的直接反向代理还是上游资源池。
+
+TCP负载平衡的upstream与HTTP的upstream非常相似，因为它将上游(pustream)资源定义为服务器，并使用Unix套接字，IP或完全限定域名（FQDN）进行配置，以及服务器权重，最大连接数， DNS解析器和连接启动周期；以及服务器是处于活动状态，还是处于关闭状态，还是处于备份模式。
+
+NGINX Plus提供了更多用于TCP负载平衡的功能。NGINX Plus中提供的这些高级功能可以在本书中找到。所有负载均衡的运行状况检查将在本章后面介绍。
+
+## 2.3 UDP负载均衡
+
+### 问题
+
+你需要在两个或多个UDP服务器之间分配负载。
+
+### 解答
+
+使用NGINX的`stream`模块在TCP服务器上使用`upstream`块进行负载均衡, UDP服务器的负载:
+
+```
+stream {
+    upstream ntp {
+        server ntp1.example.com:123  weight=2;
+        server ntp2.example.com:123;
+    }
+    server {
+        listen 123 udp;
+        proxy_pass ntp;
+    }
+}
+```
+
