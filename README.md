@@ -1,6 +1,3 @@
----
-description: 高性能负载均衡的高级实践，作者：Derek DeJonghe
----
+# NGINX实战（2019更新）
 
-# NGINX实战
-
+高性能负载均衡的高级实践，作者：Derek DeJonghe
