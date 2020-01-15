@@ -118,11 +118,11 @@ $ curl localhost
 
 可以直接使用`nginx`二进制NGINX命令工具来检查安装的版本，列出安装的modules模块，测试配置正确和向主master进程发送信号。NGINX必须正在运行才能服务响应request请求。确定NGINX是作为守护程序(daemon)运行，还是在前端运行，使用`ps`命令是种有效的命令手段。NGINX默认的配置确保其做为一个在80端口运行的静态HTTP站点服务器。你可以在机器上通过发送URL地址为`localhost`的HTTP request请求，或使用主机的IP地址或主机名来测试访问这个默认的站点。
 
-## 1.5 重要的文件，命令和目录
+## 1.5 关键的文件，命令和目录
 
 ### 问题
 
-你需要理解几个重要的NGINX命令和文件目录。
+你需要理解的几个关键的NGINX命令和目录文件。
 
 ### 解答
 
@@ -135,71 +135,92 @@ $ curl localhost
 
 `/etc/nginx/nginx.conf`
 
-> The /etc/nginx/nginx.conf file is the default configuration entry
-point used by the NGINX service. This configuration file sets up
-global settings for things like worker process, tuning, logging,
-loading dynamic modules, and references to other NGINX configuration
-files. In a default configuration, the /etc/nginx/
-nginx.conf file includes the top-level http block, which includes
-all configuration files in the directory described next
+> `/etc/nginx/nginx.conf`是NGINX服务使用的默认入口配置文件，这个配置文件为诸如工作进程，调优，日志记录，加载动态模块以及对其他NGINX配置文件的引用之类的设置设置全局设置。在默认配置中，`/etc/nginx/nginx.conf`文件包含顶级**http**块. 并且包含include的所有配置文件的目录的描述。
 
 `/etc/nginx/conf.d/`
 
-> The /etc/nginx/conf.d/ directory contains the default HTTP
-server configuration file. Files in this directory ending in .conf
-are included in the top-level http block from within the /etc/
-nginx/nginx.conf file. It’s best practice to utilize include statements
-and organize your configuration in this way to keep your
-configuration files concise. In some package repositories, this
-folder is named sites-enabled, and configuration files are linked
-from a folder named site-available; this convention is deprecated.
+> `/etc/nginx/conf.d/`目录包含了默认的HTTP配置的文件.该目录中以.conf结尾的文件
+包含在`/etc/nginx/nginx.conf`文件中的顶级**http**块中.最佳做法是利用include语句并以此方式组织你的配置，以使配置文件保持简洁。在其他的软件库中，这个文件夹的名字是`sites-enabled`，并且其中的配置文件是link链接的名为`site-available`目录中的配置文件，这样的约束现在已不再推荐。
 
 `/var/log/nginx/`
 
-> The /var/log/nginx/ directory is the default log location for
-NGINX. Within this directory you will find an access.log file and
-an error.log file. The access log contains an entry for each
-request NGINX serves. The error log file contains error events
-and debug information if the debug module is enabled.
+> `/var/log/nginx/`目录是默认的NGINX日志目录。在里面你可以找到一个 `access.log` 和一个 `error.log` 文件。 `access.log`日志文件包含每个请求访问
+NGINX服务的条目. `error.log`日志文件包含错误事件和调试信息（如果启用了调试模块）。
 
-#### NGINX 的命令
+#### NGINX 命令
 
 `nginx -h`
 
-> Shows the NGINX help menu.
+> 显示NGINX的使用帮助信息
 
 `nginx -v`
 
-> Shows the NGINX version.
+> 显示NGINX的版本
 
 `nginx -V`
-> Shows the NGINX version, build information, and configuration
-arguments, which shows the modules built in to the
-NGINX binary.
+
+> 显示NGINX版本，构建信息和配置参数，显示NGINX二进制文件中构建内置的模块。
 
 `nginx -t`
 
->Tests the NGINX configuration.
+> 测试NGINX的配置正确性。
 
 `nginx -T`
 
-> Tests the NGINX configuration and prints the validated configuration
-to the screen. This command is useful when seeking
-support.
+> 测试NGINX配置并打印经过验证的配置到屏幕。寻求支持时，此命令很有用。
 
 `nginx -s signal`
 
-> The -s flag sends a signal to the NGINX master process. You
-can send signals such as stop, quit, reload, and reopen. The
-stop signal discontinues the NGINX process immediately. The
-quit signal stops the NGINX process after it finishes processing
-inflight requests. The reload signal reloads the configuration.
-The reopen signal instructs NGINX to reopen log files.
+> **-s** 标志向NGINX 主（master）进程发送信号(signal)。你可以发送的信号(signal)为：`stop`, `quit`, `reload`和`reopen`。`stop`信号用于立即中断停止NGINX进程 。`quit`用于在处理完机上请求后停止NGINX进程。`reload`信号用于重新加载NGINX配置。`reopen`信号指示NGINX重新打开日志文件。
 
 ### 讨论
 
-With an understanding of these key files, directories, and commands,
-you’re in a good position to start working with NGINX.
-With this knowledge, you can alter the default configuration files
-and test your changes by using the nginx -t command. If your test is successful, you also know how to instruct NGINX to reload its
-configuration using the nginx -s reload command.
+了解了这些关键的文件，目录和命令后，你将可以开始使用NGINX。有了这些知识，你可以更改默认配置文件并使用`nginx -t`命令测试你的更改。如果测试成功，你还可以使用`nginx -s reload`命令指示NGINX重新加载修改后的配置。
+
+## 1.6 静态内容服务
+
+### 问题
+
+使用NGINX提供静态内容服务。
+
+### 解答
+
+覆盖`/etc/nginx/conf.d/default.conf`下默认的HTTP服务配置，使用如下配置示例：
+
+```
+server {
+    listen 80 default_server;
+    server_name www.example.com;
+    location / {
+        root /usr/share/nginx/html;
+        # alias /usr/share/nginx/html;
+        index index.html index.htm;
+    }
+}
+```
+
+### 讨论
+
+这个配置指定从`/usr/share/nginx/html`目录上通过80端口上提供HTTP静态文件服务。这个配置的第一行定义了一个新的**server**块，这为NGINX定义了一个新的监听上下文。第二行指定NGINX监听80端口，参数`default_server`指定NGINX将此服务器用作端口80的默认上下文。`server_name`指令定义request请求到达到该服务器的主机名或名称。如果配置未将上下文定义为`default_server`,则NGINX只有当接收的HTTP请求头的值与`server_name`提供的匹配时才将请求定向到该服务器。
+
+**location**块定义根据URL中的路径定义配置。路径或域后面URL的一部分，称为URI。NGINX将最好地将请求的URI匹配到`localtion`块。上面的例子中`/`匹配所有的请求。`root`指令显示了NGINX在为给定上下文提供内容时在哪里寻找静态文件，查找所请求的文件时，请求的URI会附加到`root`指令的值的后面。如果我们为`location`指令提供了URI前缀。除非我们使用别名`alias`目录而不是`root`，否则它将包含在附加路径中。最后，`index`指令为NGINX提供了一个默认文件，或者一个要检查的文件列表，以防URI中未提供其他路径。
+
+## 1.7 优雅的Reload
+
+### 问题
+
+你需要在不丢失包的情况下重新加载配置。
+
+### 解答
+
+使用NGINX的reload方法，在不停止服务器的情况下，实现配置的优美reload:
+
+```bash
+$ nginx -s reload
+```
+
+上面的示例中，使用NGINX二进制工具命令向NGINX主（master）进程发送reload信号，实现NGINX系统的重新加载。
+
+### 讨论
+
+重新加载NGINX配置而不停止服务器提供即时更改配置的能力，而无需丢弃任何数据包。在高运行时间的动态环境中，您将需要在某些时候更改负载均衡配置，NGINX允许你在保持负载均衡在线的情况下执行此操作。这个功能提供了许多可能性，比如在运行的实时环境中重新运行配置管理，或者构建支持一个应用程序，集群模块的动态配置和重新加载NGINX以满足环境的需要。
