@@ -262,7 +262,8 @@ upstream backend {
 通过NGINX Plus API使用`drain`参数(详见[第5章](Chapter_05.md))来指示NGINX停止发送未被跟踪的新连接:
 
 ```bash
-$ curl -X POST -d '{"drain":true}' 'http://nginx.local/api/3/http/upstreams/backend/servers/0'
+$ curl -X POST -d '{"drain":true}' \
+  'http://nginx.local/api/3/http/upstreams/backend/servers/0'
 ```
 ```json
 {
