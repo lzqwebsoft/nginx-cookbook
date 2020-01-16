@@ -163,3 +163,124 @@ upstream backend {
 
   这个方式仅对HTTP有效，IP哈希以客户端的IP地址做为哈希。与在通用哈希(Generic hash)中使用远程变量稍有不同，此算法使用IPv4地址或整个IPv6地址的前三个八位字节。此方法确保客户端请求代理绑定到同一上游服务器，只要该服务器可用。这在应用程序的会话状态不是由公共共享内存处理时，非常有用。该方法在使用哈希分配请求时也可以使用`weight`参数。IP哈希负载均衡方式的指令是`ip_hash`。
 
+
+## 2.5 粘滞Cookie(Sticky Cookie)
+
+### 问题
+
+你需要使用NGINX Plus将一个下流客户端绑定到上游服务器。
+
+### 解答
+
+使用`sticky cookie`指令指示NGINX Plus创建和跟踪一个cookie:
+
+```
+upstream backend {
+    server backend1.example.com;
+    server backend2.example.com;
+    sticky cookie
+            affinity
+            expires=1h
+            domain=.example.com
+            httponly
+            secure
+            path=/;
+}
+```
+
+上面的配置创建并跟踪将下游客户端与上游服务器绑定在一起的cookie。在此示例中，该cookie名为“affinity”，设置为example.com，在一小时内到期，不能在客户端使用设置为`httponly`，只能通过HTTPS发送`secure`，`/`并且对所有路径均有效。
+
+### 讨论
+
+在`sticky`指令上使用`cookie`参数会在第一个请求上创建一个cookie，其中包含有关上游服务器的信息。NGINX Plus跟踪此cookie，使其能够继续将后续请求定向到同一服务器。`cookie`参数的第一个位置参数是要创建和跟踪的cookie的名称。其他参数提供额外的控制，指示浏览器适当的使用cookie，比如过期时间(expires)、域(domain)、路径(path)，以及cookie是否可以被客户端使用(httponly)，或者是否可以通过不安全的协议传递(secure)。
+
+## 2.6 粘滞学习(Sticky Learn)
+
+### 问题
+
+你需要通过NGINX Plus使用现有的cookie将下游客户端绑定到上游服务器。
+
+### 解答
+
+使用`sticky learn`指令来发现和跟踪上游应用程序创建的cookie:
+
+```
+upstream backend {
+    server backend1.example.com:8080;
+    server backend2.example.com:8081;
+    sticky learn
+            create=$upstream_cookie_cookiename
+            lookup=$cookie_cookiename
+            zone=client_sessions:2m;
+}
+```
+
+上面的示例中指示NGINX通过在响应标头中查找名为COOKIENAME的cookie来查找和跟踪会话，并通过在请求头中查找相同的cookie来查找现有会话。这个会话关联存储在一个2 MB的共享内存区域中，该区域可以跟踪大约16,000个会话。Cookie的名称将始终是由应用程序指定。常用的cookie名称例如jsessionid或phpsessionid，通常是应用程序或应用程序服务器配置中设置的默认值。
+
+### 讨论
+
+当应用程序创建自己的会话状态（session-state）cookie时，NGINX Plus可以在请求响应中发现它们并跟踪它们。这种类型的cookie跟踪是在`sticky`指令提供了`learn`参数时执行的。用于跟踪cookie的共享内存是通过`zone`参数以及名称和大小指定的。NGINX Plus旨在通过指定的`create`参数在上游服务器的响应（response）中查找cookie，并使用`lookup`参数搜索先前注册的服务器affinity变量。 这些参数的值是HTTP模块公开的变量。
+
+## 2.7 粘滞路由(Sticky Routing)
+
+### 问题
+
+使用NGINX Plus你需要将持久性会话路由到上游服务器的方式进行精细控制。
+
+### 解答
+
+将`sticky`指令与`route`参数一起使用可使用有关路由请求的变量：
+
+```
+map $cookie_jsessionid $route_cookie {
+    ~.+\.(?P<route>\w+)$ $route;
+}
+map $request_uri $route_uri {
+    ~jsessionid=.+\.(?P<route>\w+)$ $route;
+}
+upstream backend {
+    server backend1.example.com route=a;
+    server backend2.example.com route=b;
+    sticky route $route_cookie $route_uri;
+}
+```
+
+上面的示例尝试首先通过以下方式从Cookie中提取Java session ID：首先将Java会话ID cookie的值映射到具有第一个`map`块的变量，然后使用第二个`map`块通过在请求URI中查找名为`jsessionid`的参数来进行映射将值赋给变量。带有`route`参数的`sticky`指令将传递任意数量的变量。第一个非零或非空值用于路由, 如果使用了jsessionid cookie，则将请求路由到*backend1*； 如果使用URI参数，则将请求路由到*backend2*。尽管此示例基于Java的通用session ID，但同样适用于其他开发语言的session，例如`phpsessionid`，或应用程序为该session ID生成的任何保证的唯一标识符。
+
+### 讨论
+
+有时，您可能希望通过更精细的控制将流量定向到特定服务器。`sticky`指令加上`route`参数就是为了达到这个目的而构建的。与通用哈希（generic hash）负载均衡算法相比，粘滞路由（Sticky Route）可为您提供更好的控制，实际跟踪和粘性。客户端首先根据指定的路由路由到上游服务器，然后后续请求将在cookie或URI中携带路由信息。`sticky route`接受计算多个参数，第一个非空变量用于路由到服务器。`map`映射块可用于选择性地解析变量并将其另存为其他变量以在路由中使用。实质上，`sticky route`指令会在NGINX Plus的共享内存区域内创建一个会话，用于跟踪你设置给上游服务器的客户端会话标识符。并将具有该会话标识符的请求始终传递到与初始请求相同的上游服务器。
+
+## 2.8 连接排空(Connection Draining)
+
+### 问题
+
+在维护与NGINX Plus的会话的同时，出于维护或其他原因，你需要优雅地删除服务器。
+
+### 解决
+
+通过NGINX Plus API使用`drain`参数(详见[第5章](Chapter_05.md))来指示NGINX停止发送未被跟踪的新连接:
+
+```bash
+$ curl -X POST -d '{"drain":true}' 'http://nginx.local/api/3/http/upstreams/backend/servers/0'
+```
+```json
+{
+    "id":0,
+    "server":"172.17.0.3:80",
+    "weight":1,
+    "max_conns":0,
+    "max_fails":1,
+    "fail_timeout":
+    "10s","slow_start":
+    "0s",
+    "route":"",
+    "backup":false,
+    "down":false,
+    "drain":true
+}
+```
+
+### 讨论
+
+当会话状态存储在服务器本地时，必须先排空连接和持久会话，然后再将其从池中删除。排空连接是在与服务器的会话从上游池中删除之前，自然终止与服务器的会话的过程。您可以通过在服务器指令中添加`drain`参数来配置特定服务器的排空。设置了`drain`参数后，NGINX Plus停止向该服务器发送新会话，但是允许当前会话在其会话期间继续提供服务。您还可以通过将`drain`参数添加到upstream server指令来切换该配置。
