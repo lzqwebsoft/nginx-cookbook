@@ -194,7 +194,7 @@ upstream backend {
 
 在`sticky`指令上使用`cookie`参数会在第一个请求上创建一个cookie，其中包含有关上游服务器的信息。NGINX Plus跟踪此cookie，使其能够继续将后续请求定向到同一服务器。`cookie`参数的第一个位置参数是要创建和跟踪的cookie的名称。其他参数提供额外的控制，指示浏览器适当的使用cookie，比如过期时间(expires)、域(domain)、路径(path)，以及cookie是否可以被客户端使用(httponly)，或者是否可以通过不安全的协议传递(secure)。
 
-## 2.6 粘滞学习(Sticky Learn)
+## 2.6 粘滞探知(Sticky Learn)
 
 ### 问题
 
