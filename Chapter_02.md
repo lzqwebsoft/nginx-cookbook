@@ -285,3 +285,134 @@ $ curl -X POST -d '{"drain":true}' \
 ### 讨论
 
 当会话状态存储在服务器本地时，必须先排空连接和持久会话，然后再将其从池中删除。排空连接是在与服务器的会话从上游池中删除之前，自然终止与服务器的会话的过程。您可以通过在服务器指令中添加`drain`参数来配置特定服务器的排空。设置了`drain`参数后，NGINX Plus停止向该服务器发送新会话，但是允许当前会话在其会话期间继续提供服务。您还可以通过将`drain`参数添加到upstream server指令来切换该配置。
+
+## 2.8 被动健康检查
+
+### 问题
+
+你需要被动检查上游服务器的运行状况。
+
+### 解答
+
+使用NGINX健康检查与负载平衡，以确保只有健康的上游服务器被利用:
+
+```
+upstream backend {
+    server backend1.example.com:1234 max_fails=3 fail_timeout=3s;
+    server backend2.example.com:1234 max_fails=3 fail_timeout=3s;
+}
+```
+
+上面的配置被动地监视上游运行状况，将max_failed指令设置为3，将fail_timeout设置为3秒。这些指令参数在Stream和HTTP服务器中以相同的方式工作。
+
+### 讨论
+
+NGINX的开源版本中提供了被动健康检查。在客户端请求连接通过NGINX时，被动监控失败或超时的连接。被动的健康检查默认是启动的。上面提动的参数可以帮助你更好的控制监控行为。健康监控对于所有类型的负载平衡都很重要，不仅从用户体验的角度来看如此，对于业务连续性也很同样重要。NGINX提供被动地监控上游的HTTP，TCP和UDP服务器，以确保它们正常运行。
+
+## 2.9 主动健康检查
+
+### 问题
+
+你需要使用NGINX Plus主动检查你的上游服务器的运行状况。
+
+### 解答
+
+对于HTTP，在`localtion`块中使用`health_check`指令：
+
+```
+http {
+    server {
+        ...
+        location / {
+            proxy_pass http://backend;
+            health_check interval=2s
+            fails=2
+            passes=5
+            uri=/
+            match=welcome;
+        }
+    }
+    # 响应状态码为200, 内容类型为"text/html",
+    # 并且响应body包含 "Welcome to nginx!"
+    match welcome {
+        status 200;
+        header Content-Type = text/html;
+        body ~ "Welcome to nginx!";
+    }
+}
+```
+
+这里的健康检查为HTTP服务器通过每两秒钟对URI'/'发出HTTP请求来检查上游服务器的运行状况。上游服务器必须通过五次连续的运行状况检查才能被视为运行状况良好。如果他们两次连续检查均未通过，则被视为不健康。来自上游服务器的响应必须与定义的`match`块匹配，该块将状态码定义为200，内容类型为"text/html"，并且响应body包含 "Welcome to nginx!"。HTTP `match`块具有三个指令：`status`，`header`和`body`。 所有这三个指令也都具有比较标志。
+
+TCP/UDP服务的stream健康检查非常类似:
+
+```
+stream {
+    ...
+    server {
+        listen 1234;
+        proxy_pass stream_backend;
+        health_check interval=10s
+        passes=2
+        fails=3;
+        health_check_timeout 5s;
+    }
+    ...
+}
+```
+
+在本例中，TCP服务器被配置为监听端口1234，并代理到上游的一组服务器，并主动检查这些服务器的健康状况。除了`uri`之外，stream的`health_check`指令采用与HTTP中相同的所有参数，并且stream版本有一个参数将检查协议切换为`udp`。在此示例中，时间间隔设置为10秒，要求两次通过被则认为是健康的，而三次失败则被认为是不健康的。主动的stream健康检查还能够验证来自上游服务器的响应，但是，stream服务器的`match`块只有两个指令：`send`和`expect`。`send`指令是要发送的原始数据（raw data），`expect`是要匹配确切的响应或正则表达式。
+
+### 讨论
+
+NGINX Plus中的主动健康检查不断向源服务器发出请求，以检查它们的健康状况。这些健康检查不仅可以测量响应代码，在NGINX Plus中，主动的HTTP健康检查基于上游服务器响应的一系列接受标准进行监控。你可以配置主动健康检查监视，以确定上游服务器检查的频率、服务器必须通过多少次检查才能被认为是健康的、失败的多少次数会被认为不健康，以及对响应结果预测比对。`match`参数指向一个`match`块，该块定义了响应的接受标准。`match`块还定义了在流上下文中用于TCP/UPD时要发送到上游服务器的数据。这些功能使NGINX能够确保上游服务器始终处于健康状态。
+
+## 2.11 缓慢启动
+
+### 问题
+
+在承担全部生产负载之前，您的应用程序需要进行缓慢启动。
+
+### 解答
+
+使用server指令上的slow_start参数在指定时间内逐渐增加连接数，将服务器引入到上游负载平衡池：
+
+```
+upstream {
+    zone backend 64k;
+    server server1.example.com slow_start=20s;
+    server server2.example.com slow_start=15s;
+}
+```
+
+在将服务器指令配置重新引入到池中之后，它们将会被缓慢增加到上游服务器的流量。server1将在20秒内缓慢增加其连接数，而server2将在15秒内缓慢增加其连接数。
+
+### 讨论
+
+缓慢启动的概念就是在一段时间内缓慢增加代理到服务器的请求数量。缓慢启动使应用程序可以通过填充缓存来预热，启动数据库连接，而不会在启动后立即被连接淹没。当运行健康检查失败的服务器开始再次通过并重新进入负载均衡池时，此功能将生效。
+
+## 2.12 TCP健康检查
+
+### 问题
+
+您需要检查上游TCP服务器的健康状况，并从池中删除不健康的服务器。
+
+### 解答
+
+使用`server`块中的`health_check`指令进行主动的健康检查:
+
+```
+stream {
+    server {
+        listen 3306;
+        proxy_pass read_backend;
+        health_check interval=10 passes=2 fails=3;
+    }
+}
+```
+
+该示例主动地监视上游服务器。如果上游服务器不能响应NGINX发起的3个或多个TCP连接，则会被认为是不健康的。NGINX每10秒检查一次。只有通过2次健康检查，服务器才会被认为是健康的。
+
+### 讨论
+
+NGINX Plus可以主动或被动地检测TCP健康状况。被动健康状态监视是通过记录客户机和上游服务器之间的通信来完成的。如果上游服务器超时或拒绝连接，被动健康检查将认为该服务器不健康。主动健康检查将启动自己的可配置检查来确定健康状况。活动健康状况检查不仅测试到上游服务器的连接，而且可以预测比对给定的响应。
