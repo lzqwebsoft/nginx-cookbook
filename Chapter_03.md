@@ -2,7 +2,7 @@
 
 ## 3.0 介绍
 
-NGINX和NGINX Plus也被归类为网络流量控制器。 您可以使用NGINX使用许多属性智能分配请求路由流量和控制请求流程(flow)。本章介绍NGINX能够基于百分比分配客户端请求，利用客户端的地理位置，以及根据速率，连接和带宽限制的形式控制请求流量的功能。 在阅读本章时，请记住，可以混合使用这些功能，以实现无数种可能性。
+NGINX和NGINX Plus也被归类为网络流量控制器。 你可以使用NGINX使用许多属性智能分配请求路由流量和控制请求流程(flow)。本章介绍NGINX能够基于百分比分配客户端请求，利用客户端的地理位置，以及根据速率，连接和带宽限制的形式控制请求流量的功能。 在阅读本章时，请记住，可以混合使用这些功能，以实现无数种可能性。
 
 ## 3.1 A/B测试
 
@@ -20,7 +20,7 @@ split_clients "${remote_addr}AAA" $variant {
     * "backendv1";
 }
 ```
-`split_clients`指令对你提供的字符串作为第一个参数进行MurmurHash2哈希计算处理，得到一个32位的hash值。并且将hash值按百分比提供映射给一个变量的值作为第二个参数提供。第三个参数是包含键值对的对象，其中键表示权重百分比，值表示要被分配的值。键可以是百分比或星号。星号表示取所有百分比后的剩余部分。$variant变量的值为客户端IP地址计算hash的20%定向为backendv2，剩余的80%定向为backendv1。
+`split_clients`指令对你提供的字符串作为第一个参数进行MurmurHash2哈希计算处理，得到一个32位的hash值。并且将hash值按百分比提供映射给一个变量的值作为第二个参数。第三个参数是包含键值对的对象，其中键表示权重百分比，值表示要被分配的值。键可以是百分比或星号。星号表示取所有百分比后的剩余部分。$variant变量的值为客户端IP地址计算hash的20%定向为backendv2，剩余的80%定向为backendv1。
 
 在上面的示例中，backendv1和backendv2表示上游服务器池，可以与`proxy_pass`指令结合一起使用，如下所示：
 
@@ -133,3 +133,72 @@ http {
 ### 另请参见
 
 [GeoIP Update](https://github.com/maxmind/geoipupdate)
+
+
+## 3.3 根据国家/地区限制访问
+
+### 问题
+
+你需要限制来自特定国家/地区的访问权限以符合合同或应用程序要求。
+
+### 解答
+
+将你要阻止或允许的国家代码映射到变量：
+
+```
+load_module "/usr/lib64/nginx/modules/ngx_http_geoip_module.so";
+http {
+    map $geoip_country_code $country_access {
+        "US" 0;
+        "RU" 0;
+        default 1;
+    }
+    ...
+}
+```
+上面的`map`会将新变量`$country_access`设置为1或0。如果客户端IP地址来自美国或俄罗斯，则该变量将设置为0。对于其他国家/地区，该变量将设置为1。
+
+现在，在我们的`server`块中，我们将使用if语句拒绝对非美国或俄罗斯籍人士的访问：
+
+```
+server {
+    if ($country_access = '1') {
+        return 403;
+    }
+    ...
+}
+```
+
+如果`$country_access`变量为1则，`if`表达式将会得到`True`, 如果为True，则服务器将返回未经授权的403。否则，服务器将正常运行。 从而实现阻止了非美国或俄罗斯的用户请求。
+
+### 讨论
+
+上面精简短小的例子，用于设置仅允许来自两个国家或地区的访问。你可以对这个例子稍加修改以满足你的需求，你还可以根据GeoIP模块提供的其他嵌入变量，以上面的做法为蓝本来实现允许或禁止访问。
+
+
+## 3.4 查找始发客户端
+
+### 问题
+
+你需要查找始发的客户端IP地址，因为NGINX服务器前面还有一层代理。
+
+### 解答
+
+使用`geoip_proxy`指令来定义你的代理IP地址范围，使用`geoip_proxy_recursive`指令来查找始发IP址址:
+
+```
+load_module "/usr/lib64/nginx/modules/ngx_http_geoip_module.so";
+http {
+    geoip_country /etc/nginx/geoip/GeoIP.dat;
+    geoip_city /etc/nginx/geoip/GeoLiteCity.dat;
+    geoip_proxy 10.0.16.0/26;
+    geoip_proxy_recursive on;
+    ...
+}
+```
+
+`geoip_proxy`指令定义了代理服务器所在的[CIDR](https://baike.baidu.com/item/%E6%97%A0%E7%B1%BB%E5%88%AB%E5%9F%9F%E9%97%B4%E8%B7%AF%E7%94%B1)范围，并指示NGINX利用请求头`X-Forwarded-For`查找客户端IP地址。`geoip_proxy_recursive`指令指示NGINX递归查看`X-Forwarded-For`请求头，以获取最终的一个客户端IP地址。
+
+### 讨论
+
+在实际项目中你可能会发现，如果你在NGINX前面使用了代理，则NGINX将获取的是代理的IP地址而不是客户端的IP地址。为此，当连接被指定范围内的请求打开时，使用`geoip_proxy_recursive`指令从`X-Forwarded-For`请求头中获取客户端始发IP地址。`geoip_proxy`指令接受地址或CIDR范围。当有多个代理在NGINX前面传递流量时，你可以使用`geoip_proxy_recursive`指令以递归方式搜索`X-Forwarded-For`地址以找到始发客户端。当你在NGINX的前面使用AWS ELB，Google或Azure等等的负载均衡器时，你将会需要使用这样的方法。
