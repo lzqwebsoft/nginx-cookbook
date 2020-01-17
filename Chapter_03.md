@@ -58,6 +58,7 @@ http {
         }
         ....
     }
+}
 ```
 
 这3个文件分别是 index.one.html分配0.5%的网络流量，index.two.html分配2.0%的网络流量，和index.html分配97.5%的网络流量。
