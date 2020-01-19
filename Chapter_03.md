@@ -269,8 +269,9 @@ http {
 
 ### 另请参见
 
-[Rate Limiting with NGINX and NGINX Plus](https://www.nginx.com/blog/rate-limiting-nginx/)
-译：[NGINX上的限流][https://www.jianshu.com/p/2cf3d9609af3]
+* [Rate Limiting with NGINX and NGINX Plus](https://www.nginx.com/blog/rate-limiting-nginx/)
+
+* 译：[NGINX上的限流](https://www.jianshu.com/p/2cf3d9609af3)
 
 ## 3.7 限制带宽
 
