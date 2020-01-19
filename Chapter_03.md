@@ -202,3 +202,95 @@ http {
 ### 讨论
 
 在实际项目中你可能会发现，如果你在NGINX前面使用了代理，则NGINX将获取的是代理的IP地址而不是客户端的IP地址。为此，当连接被指定范围内的请求打开时，使用`geoip_proxy_recursive`指令从`X-Forwarded-For`请求头中获取客户端始发IP地址。`geoip_proxy`指令接受地址或CIDR范围。当有多个代理在NGINX前面传递流量时，你可以使用`geoip_proxy_recursive`指令以递归方式搜索`X-Forwarded-For`地址以找到始发客户端。当你在NGINX的前面使用AWS ELB，Google或Azure等等的负载均衡器时，你将会需要使用这样的方法。
+
+## 3.5 限制连接
+
+### 问题
+
+您需要根据预定义的关健字（例如客户端的IP地址）限制连接数。
+
+### 解答
+
+构造一个共享内存区域来保存连接指标，并使用`limit_conn`指令限制打开的连接：
+
+```
+http {
+    limit_conn_zone $binary_remote_addr zone=limitbyaddr:10m;
+    limit_conn_status 429;
+    ...
+    server {
+        ...
+        limit_conn limitbyaddr 40;
+        ...
+    }
+}
+```
+
+上面配置中创建的共享内存区域名为`limitbyaddr`，预定义关健字使用二进制形式的客户端的IP地址。共享内存区域的大小设置为10 MB。指令`limit_conn`接受两个参数：一个`limit_conn_zone`名称以及允许的连接数。`limit_conn_status`设置当连接限制发生时，返回响应状态码为429，用以说明请求过多。`limit_conn`和`limit_conn_status`指令是在`http`、`server`和`location`上下文(context)中有效。
+
+注：使用$binary_remote_addr变量， 可以将每条状态记录的大小减少到64个字节，这样1M的内存可以保存大约1万6千个64字节的记录。默认请求下如果限制域的存储空间耗尽了，对于后续所有请求，服务器都会返回 503 (Service Temporarily Unavailable)错误。
+
+### 讨论
+
+基于预定义关健字的限制连接方式，在所有客户端之间公平地共享资源，可以防止请求滥用。因此设置预定义关健字显的格外的重要。前面的示例中，我为使用客户端的IP地址做为预定义关健字，但这样也可能是不合时宜的，因为可能很多不同的客户端处在同一网络，使用同一个IP地址。比如使用了网络地址转换（NAT）的方式。限制IP地址，可能导致整组客户端都被限制。`limit_conn_zone`指令只在http上下文(context)中有效。你可以使用更多数量的可用变量在NGINX http上下文中来构建字符串，来实现连接限制。使用可以在应用程序级别标识用户的变量（例如会话cookie）可能会是一种更干脆简练的解决方案。`limit_conn_status`的默认值为503，表示服务器不可用。但你可能会发现429最好用，因为该服务器这时是可用的，HTTP状态码中，500级状态码响应表示服务器错误，而400级状态码响应表示客户端错误（即是你的客户端超过了我设置的限制，出错方是客户端）。
+
+## 3.6 限制速率
+
+### 问题
+
+你需要通过预定义关健字限制请求的速率，比如根据客户端的IP地址。
+
+### 解答
+
+利用rate-limiting（速率限制）模块来完成请求速率的限制：
+
+```
+http {
+    limit_req_zone $binary_remote_addr
+        zone=limitbyaddr:10m rate=1r/s;
+    limit_req_status 429;
+    ...
+    server {
+        ...
+        limit_req zone=limitbyaddr burst=10 nodelay;
+        ...
+    }
+}
+```
+
+这面的示例配置创建了一个名为`limitbyaddr`的共享内存区域。预定义关健字使用二制进的客端IP地址。共享的内存区域大小为10MB。共享的内存区通过使有一个关键字来设置速率。`limit_req`指令采用两个可选的关键字参数：`zone`和`burst`. `zone`指令指示以什么为基础在共享内存上进行请求限制。当超过给定区域的请求速率时，请求将被延迟，直到达到由`burst`关键字参数表示的峰值，则返回503错误。`burst`关键字参数默认为0。`limit_req`还有第三个可选参数，`nodelay`，这个参数说明未达到`burst`设置的峰值之前可以毫无延时的接受处理客户端请求（达到`burst`峰值就返回429）。`limit_req_status`将返回给客户端的状态设置为特定的HTTP状态代码； `默认值为503。limit_req_status`和`limit_req`在http, server,location的上下文中可以有效被使用。`limit_req_zone`中能在http上下文中使用。速率限制在NGINX Plus中是群集感知的，是R16版本中的新增功能。
+
+注：这里面rate单位是，每秒中允许处理的请求数，这里的速率的每秒1个请求。
+
+### 讨论
+
+限速模块功能强大，可防止快速请求滥用，为所有人提供优质服务。限制请求速率的原因有很多，其中之一就是安全性。你可以通过在登录页面上设置非常严格的限制来拒绝暴力攻击。你可以对所有请求设置合理的限制，从而杜决那些可能试图让你的应用程序宕机或浪费你的服务器资源的恶意用户的计划。限速模块的配置与前面[3.5节](Chapter_03.md#35-限制连接)中提到的连接限制配置非常相似。很多设置点都挺相似。你可以指定每秒请求数或每分钟请求数限制请求的速率。达到速率限制后，将记录该事件，这儿还有一个在上面的示例中没有使用过的指令,`limit_req_log_level`。它默认是errors, 你可以指定为info, notice, 或warn。NGINX Plus中的新增功能，版本R16速率限制现在可感知群集（请参见第[12.5节](Chapter_12.md)，有关区域同步示例）。
+
+
+### 另请参见
+
+[Rate Limiting with NGINX and NGINX Plus](https://www.nginx.com/blog/rate-limiting-nginx/)
+译：[NGINX上的限流][https://www.jianshu.com/p/2cf3d9609af3]
+
+## 3.7 限制带宽
+
+### 问题
+
+你需要限制每个客户端的资源下载带宽。
+
+### 解答
+
+利用NGINX的`limit_rate`和`limit_rate_after`指令来限制对客户端的响应速度:
+
+```
+location /download/ {
+    limit_rate_after 10m;
+    limit_rate 1m;
+}
+```
+
+这个`location`块的配置指定了带有前缀*download*的uri, 这个配置指定了下载超过10m的带宽后，将限制下载速度为每秒1m。带宽限制是针对每个连接的，所以您可能需要在适用的情况下设置连接限制和带宽限制。
+
+### 讨论
+
+限制特定连接的带宽使NGINX能够以你指定的方式在所有客户机之间共享其上传带宽。这两个指令可以完成所有的工作:`limit_rate_after`和`limit_rate`。`limit_rate_after`可以在`http`, `server`, `location`的上下文中被使用，以后`if`或位于`location`上下文中的`if`中使用，`limit_rate`的适用范围同它一样。但是，还可以通过设置一个名为`$limit_rate`的变量来设置它。`limit_rate_after`用于设置http请求传输多少字节后开始限速.`limit_rate`指令默认指定给定上下文的速率限制以每秒字节数`b`为单位。但是，您可以将`m`指定为兆字节，将`g`指定为千兆字节。两个指令的默认值都是0。0表示没有下载速度限制。此模块还允许您以编程方式来更改客户端的速度限制。
