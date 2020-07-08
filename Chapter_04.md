@@ -67,6 +67,122 @@ proxy_cache_key "$host$request_uri $cookie_user";
 
 ### 讨论
 
-默认的`proxy_cache_key`适用于大多数情况，为`"$scheme$proxy_host$request_uri"`。使用的变量包括Scheme，HTTP或HTTPS、发送请求的`proxy_host`和请求URI, 因而，这代表NGINX代理请求的URL。你可能会发现，为每个应用程序定义惟一的请求还有许多其他因素，比如请求参数、请求头Header、会话Session标识符等等，你将希望为它们创建自己的Hash Key。【*注: NGINX暴露的文本或变量的任何组合都可以用于形成缓存键。 NGINX暴露的变量列表可以在这里找到：[http://nginx.org/en/docs/varindex.html](http://nginx.org/en/docs/varindex.html)*】
+默认的`proxy_cache_key`适用于大多数情况，为`"$scheme$proxy_host$request_uri"`。使用的变量包括Scheme，HTTP或HTTPS、发送请求的`proxy_host`和请求URI, 因而，这代表NGINX代理请求的URL。你可能会发现，为每个应用程序定义惟一的请求还有许多其他因素，比如请求参数、请求头Header、会话Session标识符等等，你将希望为它们创建自己的Hash Key。【*注: NGINX公开的文本或变量的任何组合都可以用于形成缓存键。 NGINX公开的变量列表可以在这里找到：[http://nginx.org/en/docs/varindex.html](http://nginx.org/en/docs/varindex.html)*】
 
 选择一个好的Hash Key非常重要，应该在理解应用程序的基础上进行思考。选择静态内容的缓存键通常非常简单；使用主机名和URI就足够了。为仪表板应用程序（Dashboard application）页面等相当动态的内容选择缓存键需要更多有关用户如何与应用程序交互以及用户体验之间的差异度的知识。出于安全方面的考虑，你可能不希望在不完全了解上下文的情况下将一个用户的缓存数据呈现给另一个用户。`proxy_cache_key`指令配置要对缓存键Cache key进行hash的字符串。`proxy_cache_key`指令可以设置在`http`上下文，`server`和`location`块，从而为如何缓存请求提供了灵活控制。
+
+## 4.3 缓存绕过
+
+### 问题
+
+你需要能够绕过缓存。
+
+### 解答
+
+使用`proxy_cache_bypass`指令通过指定非空值或非零值来实现。其中的一种方法就是在`location`块中设置一个变量，在你不需要缓存的时候等于1：
+
+```
+proxy_cache_bypass $http_cache_bypass;
+```
+这个配置告诉NGINX，如果名为`cache_bypass`的HTTP请求头被设置为任何不为0的值时则绕过缓存。
+
+
+### 讨论
+
+有许多场景需要不缓存请求，为此，NGINX公开了`proxy_cache_bypass`指令。因此，当值为非空或非零时，请求将被发送到上游服务器，而不是从缓存中提取。绕过缓存的不同需求和场景将由对应的应用程序决定。绕过缓存的技术可以像使用请求或响应头那样简单，也可以像多个映射块一起工作那样复杂。
+
+由于许多原因，您可能希望绕过缓存。一个重要的原因是故障排除和调试。如果一直拉取缓存的页面，或者缓存键特定于某个用户标识符，那么重现问题将变的很困难，因此如果能绕过缓存显的很有必要。绕过缓存的选项包括但不限于在设置特定cookie、header或请求参数。还可以通过将`proxy_cache`设置为`off`；比如在`location`块中完全关闭给定上下文的缓存。
+
+## 4.4 缓存性能
+
+### 问题
+
+你需要通过在客户端设置缓存来提高性能。
+
+### 解答
+
+使用客户端缓存控制头：
+
+```
+location ~* \.(css|js)$ {
+    expires 1y;
+    add_header Cache-Control "public";
+}
+```
+这个`location`块指定客户端可以缓存CSS和Javascript文件。其中的`expires`指令指示客户端缓存的资源的有效期是一年。如上的`add_header`指令将HTTP响应头Header中添加`Cache-Control`标识，并且设置的值为`public`，这允许沿途的任何缓存服务器缓存资源。相反的如果我们指定为`private`，则仅允许客户端缓存该值。
+
+### 讨论
+
+导致缓存性能的有很多方面的因素，磁盘速度一定是其中最重要的因素。在NGINX配置中有很多方法可以帮助提高缓存性能，其中的一种方法就是设置响应头，这样客户端实际上缓存了响应，并且根本不会再向NGINX服务器再发出请求，而只是从自己磁盘上读取缓存。
+
+## 4.5 清除
+
+### 问题
+
+你需要使缓存中的对象无效化。
+
+### 解答
+
+使用NGINX Plus的清除功能，`proxy_cache_purge`指令以及非空或零值变量：
+
+```
+map $request_method $purge_method {
+    PURGE 1;
+    default 0;
+}
+server {
+    ...
+    location / {
+        ...
+        proxy_cache_purge $purge_method;
+    }
+}
+```
+在本例中，如果使用`PURGE`方法请求特定对象的缓存，则该对象的缓存将被清除。下面是一个清除名为`main.js`文件缓存的`curl`示例：
+
+```bash
+$ curl -XPURGE localhost/main.js
+```
+
+### 讨论
+
+处理静态文件的一种常见方法是在文件名中放入文件的哈希值（即请求路径加上文件的hash值），这样可以确保在推出新代码和内容时，由于URI更改，CDN会将其识别为新文件。但是，这不适用于，你设置了不适合此模型的缓存键（cache keys）的动态内容。在每个缓存场景中，都必须有清除缓存的方法。NGINX Plus提供了一种清除缓存响应的简单方法。 当`proxy_cache_purge`指令传递非零或非空值时，将清除与请求匹配的缓存项。设置清除的一种简单方法是通过map映射PURGE的请求方法（request method）。但是，你可能还希望将其与`geo_ip`模块或简单身份验证结合使用，以确保没有人能够清除你的宝贵缓存项。NGINX还允许使用`*`(通配符)，它将清除与公共URI前缀匹配的缓存项。要使用通配符，需要使用`purger=on`参数配置`proxy_cache_path`指令。
+
+## 4.6 缓存切片
+
+### 问题
+
+你需要通过将文件分割成片段来提高缓存效率。
+
+### 解答
+
+使用NGINX slice指令及其内嵌变量将缓存结果划分为片段:
+
+```
+proxy_cache_path /tmp/mycache keys_zone=mycache:10m;
+server {
+    ...
+    proxy_cache mycache;
+    slice 1m;
+    proxy_cache_key $host$uri$is_args$args$slice_range;
+    proxy_set_header Range $slice_range;
+    proxy_http_version 1.1;
+    proxy_cache_valid 200 206 1h;
+
+    location / {
+        proxy_pass http://origin:80;
+    }
+}
+```
+
+### 讨论
+
+此配置定义了一个缓存区域，并为服务器启用它。然后使用`slice`指令指示NGINX将响应切片成1MB大小的文件段。缓存文件根据`proxy_cache_key`指令存储。注意，使用了名为`slice_range`的嵌入式变量。在向原服务器发出请求时，同样的变量`slice_range`被用作请求头。并且请求HTTP版本被升级为HTTP/1.1，因为1.0不支持字段域byterange请求。响应码为`200`或`206`的缓存有效性设置为1小时，然后定义`location`和被代理的请求源。
+
+缓存切片模块是为传递HTML5视频而开发的，该模块使用字段域byterange请求将内容伪流传输到浏览器。默认情况下，NGINX能够从它的缓存中提供字段域byterange请求。如果请求未缓存内容的字段域，则NGINX从源中请求整个文件。当你使用缓存切片模块时，NGINX仅从源请求必要的段。大于切片大小的范围请求（包括整个文件）将触发每个所需段的子请求，然后将这些段缓存。当所有的段都被缓存后，响应被组装并发送到客户端，使NGINX可以更有效地缓存并提供范围内请求的内容。缓存切片模块仅应用于不会更改的大文件。NGINX每次从源器接收到一个片段时都会对其进行ETag验证。如果源上的ETag发生更改，则NGINX将中止事务，因为缓存不再有效。如果内容确实发生变化并且文件较小，或者你的源可以在缓存填充过程中处理高峰负载。最好使用下面“另请参见”博客中描述的缓存锁模块。
+
+### 另请参见
+
+[Smart and Efficient Byte-Range Caching with NGINX & NGINX Plus](https://www.nginx.com/blog/smart-efficient-byte-range-caching-nginx/)
+
+注：[RFC7233 HTTP范围请求(Range Requests)](https://blog.csdn.net/u012062760/article/details/77096479)
