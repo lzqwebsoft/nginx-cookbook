@@ -257,7 +257,7 @@ $ curl -X PATCH -d '{"127.0.0.1":null}' \
 
 ### 讨论
 
-键值存储是NGINX Plus的专有功能，这使得应用程序能够将信息注入NGINX Plus。在上面提供的示例中，`$remote_addr`变量用于创建动态黑名单。你可以使用NGINX Plus提供的任意变量来构建键值存储（例如，一个session cookie），并为NGINX Plus提供外部值。在NGINX Plus R16版本中，键值存储是集群感知型，这意味着你只需要向一台NGINX Plus服务器提供键值更新，它们都将收到信息。
+键值存储是NGINX Plus的专有功能，这使得应用程序能够将信息注入NGINX Plus。在上面提供的示例中，`$remote_addr`变量用于创建动态黑名单。你可以使用NGINX Plus提供的任意变量来构建键值存储（例如，一个session cookie），并为NGINX Plus提供外部值。在NGINX Plus R16版本中，键值存储是集群感知的，这意味着你只需要向一台NGINX Plus服务器提供键值更新，它们都将收到信息。
 
 ### 另请参见
 
