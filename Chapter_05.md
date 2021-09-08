@@ -300,18 +300,12 @@ Puppet 是一个基于 Ruby 编程语言的配置管理工具。以特定的域�
 
 ### 另请参见
 
-[Puppet Documentation](https://puppet.com/docs/)
-
-[Puppet Package Documentation](https://puppet.com/docs/puppet/7/types/package.html)
-
-[Puppet Service Documentation](https://puppet.com/docs/puppet/7/types/service.html)
-
-[Puppet File Documentation](https://puppet.com/docs/puppet/7/types/file.html)
-
-[Puppet Templating Documentation](https://puppet.com/docs/puppet/7/lang_template.html)
-
-[Voxpupuli NGINX Module](https://github.com/voxpupuli/puppet-nginx)
-
+[Puppet Documentation](https://puppet.com/docs/)<br>
+[Puppet Package Documentation](https://puppet.com/docs/puppet/7/types/package.html)<br>
+[Puppet Service Documentation](https://puppet.com/docs/puppet/7/types/service.html)<br>
+[Puppet File Documentation](https://puppet.com/docs/puppet/7/types/file.html)<br>
+[Puppet Templating Documentation](https://puppet.com/docs/puppet/7/lang_template.html)<br>
+[Voxpupuli NGINX Module](https://github.com/voxpupuli/puppet-nginx)<br>
 
 ## 5.4 使用Chef进行安装
 
@@ -351,12 +345,8 @@ Chef是一个基于Ruby的配置管理工具。Chef可以在主从配置或单�
 
 ### 另请参见
 
-[Chef documentation](https://docs.chef.io/)
-
-[Chef Package](https://docs.chef.io/resources/package/)
-
-[Chef Service](https://docs.chef.io/resources/service/)
-
-[Chef Template](https://docs.chef.io/resources/template/)
-
+[Chef documentation](https://docs.chef.io/)<br>
+[Chef Package](https://docs.chef.io/resources/package/)<br>
+[Chef Service](https://docs.chef.io/resources/service/)<br>
+[Chef Template](https://docs.chef.io/resources/template/)<br>
 [Chef Supermarket for NGINX](https://supermarket.chef.io/cookbooks/nginx)
