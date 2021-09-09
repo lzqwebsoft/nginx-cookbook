@@ -359,3 +359,101 @@ Chef是一个基于Ruby的配置管理工具。Chef可以在主从配置或单�
 [Chef Template](https://docs.chef.io/resources/template/)
 
 [Chef Supermarket for NGINX](https://supermarket.chef.io/cookbooks/nginx)
+
+## 5.5 使用Ansible进行安装
+
+### 问题
+
+你需要使用Ansible作为代码来安装、配置和管理NGINX，并与你的其他Ansible配置保持一致。
+
+### 解答
+
+创建一个Ansible playbook来安装NGNIX和管理*nginx.conf*文件。以下是playbook安装NGINX的示例任务文件。确保它的运行并模板化配置文件：
+
+```yaml
+- name: NGINX | Installing NGINX
+  package: name=nginx state=present
+
+- name: NGINX | Starting NGINX
+  service:
+    name: nginx
+    state: started
+    enabled: yes
+
+- name: Copy nginx configuration in place.
+  template:
+    src: nginx.conf.j2
+    dest: "/etc/nginx/nginx.conf"
+    owner: root
+    group: root
+    mode: 0644
+  notify:
+    - reload nginx
+```
+这里的`package`块安装NGINX，`service`块确保NGINX在系统启动时被启动和启用。`template`块模板一个*Jinja2*文件，并将结果放在<i>/etc/nginx.conf</i>文件中，其所有者和用户组为root。`template` 块还将对应的文件权限属性设置为`644`并通知 `nginx`服务重新`reload`。同样在这里模板文件没有被包含列出来。然而，安装默认的 NGINX 配置文件可能很简单，但如果使用 Jinja2 模板语言循环和变量替换则变的非常复杂。
+
+### 讨论
+
+Ansible 是一款基于 Python 的应用广泛且功能强大的配置管理工具。任务配置文件使用的是YAML格式，同样你可以使用Jinja2模板语言编写模板文件。Ansible 在订阅模型上提供了一个名为 Ansible Tower 的 master。它通常用于从本地机器或直接向客户端或在无主模型中构建服务器，Ansible 可以批量 SSH 连接到其服务器并运行配置。与其他配置管理工具非常相似，Ansible也有一个庞大的公共角色社区。Ansible 将其称之为 Ansible Galaxy。 你可以在你的playbooks中找到非常复杂的角色。
+
+### 另请参见
+
+[Ansible Documentation](https://docs.ansible.com/)
+
+[Ansible Packages](https://docs.ansible.com/ansible/package_module.html)
+
+[Ansible Service](https://docs.ansible.com/ansible/service_module.html)
+
+[Ansible Template](https://docs.ansible.com/ansible/template_module.html)
+
+[Ansible Galaxy](https://galaxy.ansible.com/)
+
+
+## 5.6 使用SaltStack进行安装
+
+### 问题
+
+你需要使用SaltStack作为代码来安装、配置和管理NGINX，并与你的其他SaltStack配置保持一致。
+
+### 解答
+
+通过包管理模块安装NGINX，并管理您需要的配置文件。下面是一个示例状态文件(sls)，它将安装`nginx`包，并确保服务正在运行，在系统重启时启用，并在配置文件更改时重新`reload`:
+
+```yaml
+nginx:
+  pkg:
+    - installed
+  service:
+    - name: nginx
+    - running
+    - enable: True
+    - reload: True
+    - watch:
+      - file: /etc/nginx/nginx.conf
+/etc/nginx/nginx.conf:
+  file:
+    - managed
+    - source: salt://path/to/nginx.conf
+    - user: root
+    - group: root
+    - template: jinja
+    - mode: 644
+    - require:
+      - pkg: nginx
+```
+这是一个通过包管理工具安装NGINX和管理*ningx.conf*文件的基础示例。NGINX包将会被安装，并且对应的service服务运行，并在系统重启时自动运行。使用SaltStack，你可以声明一个由Salt管理的文件，如示例中所示，并通过许多不同的模板语言进行模板化。同样在这里模板文件没有被包含列出来。然而，安装默认的 NGINX 配置文件可能很简单，但如果使用 Jinja2 模板语言循环和变量替换则变的非常复杂。因为`require`语句，这个配置还指定了NGINX必须在管理文件之前安装。文件就位后，NGINX 会因为`watch` 指令重新加载
+服务，在这里是reload而不是restart，是因为 `reload` 指令设置为 `True`。
+
+### 讨论
+
+SaltStack 是一个强大的配置管理工具，它使用YAML文件定义服务器状态。SaltStack的模块可以使用Python编写。Salt 公开了用于状态和文件的 Jinja2 模板语言。但是，对于文件，还有许多其他选项，例如Mako、Python 本身等。Salt可以在主从配置以及无主配置中工作。从服务器被称为minions。然而，主从传输通信与其他传输通信不同，这并使得SaltStack与众不同。使用 Salt，您可以选择 ZeroMQ、TCP 或可靠异步事件传输 (Reliable Asynchronous Event Transport(RAET)) 来传输到 Salt 代理，或者你不能使用代理，master 可以使用 SSH 代替。因为传输层在默认情况下是异步的，所以构建SaltStack时能够将其消息传递给大量负载较低的主服务器。
+
+### 另请参见
+
+[SaltStack](https://docs.saltproject.io/en/latest/)
+
+[Installed Packages](https://docs.saltproject.io/en/latest/ref/states/all/salt.states.pkg.html#salt.states.pkg.installed)
+
+[Managed Files](https://docs.saltproject.io/en/latest/ref/states/all/salt.states.file.html#salt.states.file.managed)
+
+[Templating with Jinja](https://docs.saltproject.io/en/latest/topics/jinja/index.html)
