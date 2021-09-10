@@ -110,3 +110,107 @@ NGINX Plus能够验证令牌的JSON web签名类型，而不是整个令牌都�
 [NGINX Embedded Variables](http://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#variables)
 
 [Detailed NGINX Blog](https://www.nginx.com/blog/authenticating-api-clients-jwt-nginx-plus/)
+
+## 6.4 创建JSON Web Keys
+
+### 问题
+
+你需要一个 JSON Web Key 供 NGINX Plus 使用。
+
+### 解答
+
+NGINX Plus采用RFC标准中指定的JWK (JSON Web Key)格式。这个标准允许在JWK文件中包含一个关键对象数组。
+
+以下是key文件的示例：
+
+```json
+{"keys":
+    [
+        {
+            "kty":"oct",
+            "kid":"0001",
+            "k":"OctetSequenceKeyValue"
+        },
+        {
+            "kty":"EC",
+            "kid":"0002",
+            "crv":"P-256",
+            "x": "XCoordinateValue",
+            "y": "YCoordinateValue",
+            "d": "PrivateExponent",
+            "use": "sig"
+        },
+        {
+            "kty":"RSA",
+            "kid":"0003",
+            "n": "Modulus",
+            "e": "Exponent",
+            "d": "PrivateExponent"
+        }
+    ]
+}
+```
+
+如上所示的JWK文件演示了RFC标准中提到的三种初始密钥类型。这些密钥的格式都是 RFC 标准的一部分。 `kty` 属性所指的就是密钥类型。这个文件显示了三种密钥类型:Octet Sequence (oct)、EllipticCurve (EC)和RSA类型。`kid` 属性是密钥 ID。 这些密钥的其他属性在该类型密钥的标准中都有相应的规定。查看这些标准的 RFC 文档可获取更多信息。
+
+### 讨论
+
+有许多不同语言的库可用于生成 JSON Web Key。建议创建一个关键服务，作为中央 JWK 权限的管理，以定期创建和轮换你的 JWK。为了增强安全性，建议使你的 JWK 与 SSL/TLS 认证一样安全。使用适当的用户和组权限保护你的密钥文件。将它们保存在主机的内存中是最佳做法。你可以通过创建一个内存文件系统来实现，比如ramfs。定期轮换密钥也很重要；你可以选择创建一个密钥服务来创建公钥和私钥，并通过 API 将它们提供给应用程序和NGINX。
+
+### 另请参见
+
+[RFC standardization documentation of JSON Web Key](https://datatracker.ietf.org/doc/html/rfc7517)
+
+## 6.5 通过现有 OpenID Connect SSO 对用户进行身份验证
+
+### 问题
+
+你想将 OpenID Connect 身份验证验证整合到 NGINX Plus。
+
+### 解答
+
+使用 NGINX Plus 自带的 JWT 模块来保护一个 `location` 或 `server`，并指示 `auth_jwt` 指令使用 `$cookie_auth_token` 作为要验证的令牌：
+
+```
+location /private/ {
+    auth_jwt "Google Oauth" token=$cookie_auth_token;
+    auth_jwt_key_file /etc/nginx/google_certs.jwk;
+}
+```
+
+此配置指示 NGINX Plus 使用 JWT 验证保护 <i>/private/</i> URI路径。Google OAuth 2.0 OpenID Connect 使用 cookie `auth_token` 而不是默认的bearer token。因此，你必须指示 NGINX 在此 cookie 中而不是在 NGINX Plus 的默认位置中查找令牌。我们将在[6.6节](Chapter_06.md#66-从 Google 获取 JSON Web Key)中介绍，如何设置`auth_jwt_key_file`的文件路径。
+
+### 讨论
+
+上面的配置演示了如何使用 NGINX Plus 验证 Google OAuth 2.0 OpenID Connect JSON Web 令牌。NGINX Plus的HTTP JWT认证模块能够验证任何符合RFC的JSON Web签名规范的JSON Web令牌，允许任何使用JSON Web令牌的SSO授权快速的在NGINX Plus层中进行验证。OpenID 1.0 协议是 OAuth 2.0 身份验证协议之上的一层，它添加了身份，允许使用 JWT 来证明发送请求的用户的身份。通过令牌的签名，NGINX Plus可以验证令牌自签名以来没有被修改过。通过这种方式，Google使用了一个异步签名方法，并使其能够在保持私有JWK秘密的同时发布公共JWK。NGINX Plus 还可以控制 OpenID Connect 1.0 的授权代码流，使 NGINX Plus 成为 OpenID Connect 的中继方。该功能能够与大多数主流身份标识提供商集成，包括CA Single Sign-On（以前称为 SiteMinder）、ForgeRock OpenAM、Keycloak、Okta、OneLogin和Ping Identity.有关 NGINX Plus 作为 OpenID Connect 身份验证依赖方的更多信息和参考实现，请查看 [NGINX Inc OpenID Connect GitHub Repository](https://github.com/nginxinc/nginx-openid-connect)。
+
+### 另请参见
+
+[Detailed NGINX Blog on OpenID Connect](https://www.nginx.com/blog/authenticating-users-existing-applications-openid-connect-nginx-plus/)
+
+[OpenID Connect](https://openid.net/connect/)
+
+## 6.6 从 Google 获取 JSON Web Key
+
+### 问题
+
+你需要从 Google 获取 JSON Web Key，以便在使用 NGINX Plus 验证 OpenID Connect 令牌时使用。
+
+### 解决
+
+利用 Cron 每小时请求一组新的密钥，以确保你始终是最新的：
+
+```bash
+0 * * * * root wget https://www.googleapis.com/oauth2/v3/ \
+   certs-O /etc/nginx/google_certs.jwk
+```
+
+此代码片段是 crontab 文件中的一行。 类 Unix 系统对于 crontab 文件的存放位置有很多选择。每个用户都会有一个用户特定的 crontab，并且<i> /etc/ </i> 目录中还有许多文件和目录。
+
+### 讨论
+
+Cron 是在类 Unix 系统上运行计划任务的常用方法。 JSON Web Keys 应定期轮换以确保密钥的安全，进而确保你的系统安全。为确保你始终拥有来自 Google 的最新密钥，你需要定期检查新的 JWK。 这个 Cron 解决方案只是这样做的其中一种方式。
+
+### 另请参见
+
+[Cron](https://linux.die.net/man/8/cron)
