@@ -178,7 +178,7 @@ location /private/ {
 }
 ```
 
-此配置指示 NGINX Plus 使用 JWT 验证保护 <i>/private/</i> URI路径。Google OAuth 2.0 OpenID Connect 使用 cookie `auth_token` 而不是默认的bearer token。因此，你必须指示 NGINX 在此 cookie 中而不是在 NGINX Plus 的默认位置中查找令牌。我们将在[6.6节](Chapter_06.md#66-从 Google 获取 JSON Web Key)中介绍，如何设置`auth_jwt_key_file`的文件路径。
+此配置指示 NGINX Plus 使用 JWT 验证保护 <i>/private/</i> URI路径。Google OAuth 2.0 OpenID Connect 使用 cookie `auth_token` 而不是默认的bearer token。因此，你必须指示 NGINX 在此 cookie 中而不是在 NGINX Plus 的默认位置中查找令牌。我们将在[6.6节](Chapter_06.md#66-从-google-获取-json-web-key)中介绍，如何设置`auth_jwt_key_file`的文件路径。
 
 ### 讨论
 
